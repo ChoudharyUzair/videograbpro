@@ -62,6 +62,19 @@ def get_video_info(url):
         'no_warnings': True,
         'extract_flat': False,
         'skip_download': True,
+        # YouTube bot protection bypass
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        }
     }
     
     try:
@@ -110,12 +123,15 @@ def get_video_info(url):
 
 
 def download_video(url, quality='best', format_type='mp4', audio_only=False):
-    """Download video with specified quality"""
+    """Download video with specified quality - Multi-platform support"""
     
     # Clean old files before downloading
     threading.Thread(target=clean_old_files).start()
     
     output_template = os.path.join(DOWNLOAD_DIR, '%(title)s_%(id)s.%(ext)s')
+    
+    # Detect platform for platform-specific settings
+    platform = detect_platform(url)
     
     if audio_only:
         # Audio only download (MP3)
@@ -129,6 +145,15 @@ def download_video(url, quality='best', format_type='mp4', audio_only=False):
             'outtmpl': output_template,
             'quiet': False,
             'no_warnings': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash', 'hls']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            }
         }
     else:
         # Video download with quality selection
@@ -151,7 +176,42 @@ def download_video(url, quality='best', format_type='mp4', audio_only=False):
             'merge_output_format': format_type,
             'quiet': False,
             'no_warnings': False,
+            # Multi-platform support with bot protection
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash', 'hls']
+                },
+                'tiktok': {
+                    'api_hostname': 'api22-normal-c-useast2a.tiktokv.com'
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
+            # Platform-specific options
+            'nocheckcertificate': True,
+            'geo_bypass': True,
+            'age_limit': None,
         }
+        
+        # TikTok specific settings
+        if platform == 'tiktok':
+            ydl_opts['format'] = 'best'
+            ydl_opts['http_headers']['Referer'] = 'https://www.tiktok.com/'
+        
+        # Instagram specific settings
+        elif platform == 'instagram':
+            ydl_opts['format'] = 'best'
+            ydl_opts['http_headers']['Referer'] = 'https://www.instagram.com/'
+        
+        # Twitter/X specific settings
+        elif platform == 'twitter':
+            ydl_opts['format'] = 'best'
+            ydl_opts['http_headers']['Referer'] = 'https://twitter.com/'
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -178,7 +238,8 @@ def download_video(url, quality='best', format_type='mp4', audio_only=False):
                     'title': info.get('title', 'video'),
                     'filesize': file_size,
                     'duration': info.get('duration', 0),
-                    'format': format_type if not audio_only else 'mp3'
+                    'format': format_type if not audio_only else 'mp3',
+                    'platform': platform
                 }
             else:
                 return {
@@ -190,7 +251,7 @@ def download_video(url, quality='best', format_type='mp4', audio_only=False):
         return {
             'success': False,
             'error': str(e),
-            'message': 'Download failed'
+            'message': f'Download failed for {platform}: {str(e)}'
         }
 
 
@@ -201,12 +262,14 @@ def index():
     """Health check endpoint"""
     return jsonify({
         'status': 'running',
-        'message': 'Video Downloader Backend API',
-        'version': '1.0.0',
+        'message': 'Video Downloader Backend API - Multi-Platform Support',
+        'version': '2.0.0',
+        'platforms': ['YouTube', 'TikTok', 'Instagram', 'Twitter/X', 'Facebook', 'Sora'],
         'endpoints': {
             '/api/info': 'POST - Get video information',
             '/api/download': 'POST - Download video',
-            '/api/platforms': 'GET - Supported platforms'
+            '/api/platforms': 'GET - Supported platforms',
+            '/api/health': 'GET - Health check'
         }
     })
 
@@ -217,12 +280,12 @@ def get_platforms():
     return jsonify({
         'success': True,
         'platforms': [
-            {'name': 'YouTube', 'id': 'youtube', 'supported': True},
-            {'name': 'TikTok', 'id': 'tiktok', 'supported': True},
-            {'name': 'Instagram', 'id': 'instagram', 'supported': True},
-            {'name': 'Twitter/X', 'id': 'twitter', 'supported': True},
-            {'name': 'Facebook', 'id': 'facebook', 'supported': True},
-            {'name': 'Sora (OpenAI)', 'id': 'sora', 'supported': True},
+            {'name': 'YouTube', 'id': 'youtube', 'supported': True, 'features': ['4K', 'Audio', 'Subtitles']},
+            {'name': 'TikTok', 'id': 'tiktok', 'supported': True, 'features': ['No Watermark', 'HD']},
+            {'name': 'Instagram', 'id': 'instagram', 'supported': True, 'features': ['Reels', 'IGTV', 'Posts']},
+            {'name': 'Twitter/X', 'id': 'twitter', 'supported': True, 'features': ['HD', 'GIFs']},
+            {'name': 'Facebook', 'id': 'facebook', 'supported': True, 'features': ['HD', 'Stories']},
+            {'name': 'Sora (OpenAI)', 'id': 'sora', 'supported': True, 'features': ['AI Videos']},
         ]
     })
 
@@ -247,6 +310,14 @@ def video_info():
                 'error': 'Invalid URL format'
             }), 400
         
+        # Detect platform
+        platform = detect_platform(url)
+        if platform == 'unknown':
+            return jsonify({
+                'success': False,
+                'error': 'Unsupported platform. Supported: YouTube, TikTok, Instagram, Twitter, Facebook, Sora'
+            }), 400
+        
         info = get_video_info(url)
         return jsonify(info)
         
@@ -259,7 +330,7 @@ def video_info():
 
 @app.route('/api/download', methods=['POST'])
 def download():
-    """Download video with specified quality and format"""
+    """Download video with specified quality and format - Multi-platform"""
     try:
         data = request.get_json()
         url = data.get('url', '').strip()
@@ -271,6 +342,14 @@ def download():
             return jsonify({
                 'success': False,
                 'error': 'URL is required'
+            }), 400
+        
+        # Detect and validate platform
+        platform = detect_platform(url)
+        if platform == 'unknown':
+            return jsonify({
+                'success': False,
+                'error': 'Unsupported platform'
             }), 400
         
         # Start download
@@ -306,7 +385,8 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'uptime': 'running'
+        'uptime': 'running',
+        'platforms_supported': 6
     })
 
 
